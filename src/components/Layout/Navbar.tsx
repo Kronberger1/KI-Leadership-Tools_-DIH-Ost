@@ -1,28 +1,41 @@
 import React from 'react';
-import { LayoutDashboard, ClipboardList, TrendingUp, Users, UserCircle, Sparkles } from 'lucide-react';
-import type { View } from '../../types';
+import { LayoutDashboard, ClipboardList, TrendingUp, Users, UserCircle, Sparkles, LogOut } from 'lucide-react';
+import type { View, UserRole } from '../../types';
 
 interface NavItem {
   id: View;
   label: string;
   icon: React.ElementType;
-  teamOnly?: boolean;
+  minRole?: UserRole; // only roles with equal or higher privilege see this
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'assessment', label: 'Selbsteinschätzung', icon: ClipboardList },
-  { id: 'gap', label: 'Entwicklungsplan', icon: TrendingUp },
-  { id: 'team', label: 'Team-Überblick', icon: Users },
+  { id: 'dashboard',   label: 'Dashboard',         icon: LayoutDashboard },
+  { id: 'assessment',  label: 'Selbsteinschätzung', icon: ClipboardList },
+  { id: 'gap',         label: 'Entwicklungsplan',   icon: TrendingUp },
+  { id: 'team',        label: 'Team-Überblick',     icon: Users, minRole: 'Teamleiter' },
 ];
+
+// Roles ordered by privilege (lowest → highest)
+const ROLE_RANK: Record<UserRole, number> = {
+  Mitarbeiter: 0,
+  Teamleiter:  1,
+  HR:          2,
+};
+
+const ROLE_BADGE: Record<UserRole, { bg: string; text: string; label: string }> = {
+  Mitarbeiter: { bg: '#f3f4f6', text: '#374151', label: 'Mitarbeiter:in' },
+  Teamleiter:  { bg: '#dbeafe', text: '#1d4ed8', label: 'Teamleiter:in' },
+  HR:          { bg: '#dcfce7', text: '#166534', label: 'HR / Admin' },
+};
 
 interface Props {
   currentView: View;
   onNavigate: (view: View) => void;
   profileName: string;
   onEditProfile: () => void;
-  isTeamMode: boolean;
-  onToggleTeamMode: () => void;
+  userRole: UserRole;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -30,15 +43,22 @@ export const Navbar: React.FC<Props> = ({
   onNavigate,
   profileName,
   onEditProfile,
-  isTeamMode,
-  onToggleTeamMode,
+  userRole,
+  onLogout,
 }) => {
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.minRole || ROLE_RANK[userRole] >= ROLE_RANK[item.minRole]
+  );
+
+  const badge = ROLE_BADGE[userRole];
+
   return (
     <header
       className="sticky top-0 z-50 border-b border-white/10 shadow-lg"
       style={{ background: 'linear-gradient(90deg, #1e3a5f 0%, #2a4f7c 100%)' }}
     >
       <div className="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+
         {/* Logo */}
         <div className="flex items-center gap-2.5 shrink-0">
           <div
@@ -54,7 +74,7 @@ export const Navbar: React.FC<Props> = ({
 
         {/* Nav items */}
         <nav className="flex items-center gap-1">
-          {NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
             return (
@@ -76,18 +96,13 @@ export const Navbar: React.FC<Props> = ({
 
         {/* Right side */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Team mode toggle */}
-          <button
-            onClick={onToggleTeamMode}
-            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              isTeamMode
-                ? 'bg-teal-400/30 text-teal-200'
-                : 'bg-white/10 text-white/60 hover:text-white hover:bg-white/15'
-            }`}
+          {/* Role badge */}
+          <span
+            className="hidden md:block text-[10px] font-semibold px-2 py-1 rounded-full"
+            style={{ backgroundColor: badge.bg, color: badge.text }}
           >
-            <Users size={13} />
-            {isTeamMode ? 'Team-Ansicht' : 'Meine Ansicht'}
-          </button>
+            {badge.label}
+          </span>
 
           {/* Profile button */}
           <button
@@ -96,6 +111,16 @@ export const Navbar: React.FC<Props> = ({
           >
             <UserCircle size={15} />
             <span className="hidden sm:block">{profileName}</span>
+          </button>
+
+          {/* Logout */}
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition text-xs font-medium"
+            title="Abmelden"
+          >
+            <LogOut size={15} />
+            <span className="hidden sm:block">Abmelden</span>
           </button>
         </div>
       </div>

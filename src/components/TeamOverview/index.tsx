@@ -6,11 +6,13 @@ import { Download, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import { COMPETENCY_AREAS } from '../../data/competencies';
 import { calcAreaScores, calcOverallAverage, getMaturityBadge } from '../../hooks/useAssessmentStore';
 import { exportTeamCsv } from '../../utils/csvExport';
-import type { EmployeeProfile, AssessmentData } from '../../types';
+import type { EmployeeProfile, AssessmentData, UserRole } from '../../types';
 
 interface Props {
   teamProfiles: EmployeeProfile[];
   allAssessments: AssessmentData[];
+  userRole?: UserRole;
+  userDepartment?: string;
 }
 
 function heatmapColor(score: number | null): string {
@@ -35,8 +37,17 @@ const AREA_SHORT_LABELS = COMPETENCY_AREAS.map((a) =>
 type SortKey = 'name' | 'overall' | string;
 type SortDir = 'asc' | 'desc';
 
-export const TeamOverview: React.FC<Props> = ({ teamProfiles, allAssessments }) => {
-  const [filterAbteilung, setFilterAbteilung] = useState('');
+export const TeamOverview: React.FC<Props> = ({
+  teamProfiles,
+  allAssessments,
+  userRole,
+  userDepartment,
+}) => {
+  // Teamleiter: pre-filter to their department (locked); HR: free choice
+  const isTeamleiter = userRole === 'Teamleiter';
+  const [filterAbteilung, setFilterAbteilung] = useState(
+    isTeamleiter && userDepartment ? userDepartment : ''
+  );
   const [filterRolle, setFilterRolle] = useState('');
   const [filterZeitraum, setFilterZeitraum] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -164,8 +175,27 @@ export const TeamOverview: React.FC<Props> = ({ teamProfiles, allAssessments }) 
           <Filter size={14} className="text-gray-400" />
           <span className="text-xs font-medium text-gray-600">Filter:</span>
         </div>
+
+        {/* Abteilung: locked chip for Teamleiter, dropdown for HR */}
+        {isTeamleiter ? (
+          <span
+            className="text-xs px-3 py-2 rounded-lg font-medium"
+            style={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}
+          >
+            {userDepartment ?? 'Meine Abteilung'}
+          </span>
+        ) : (
+          <select
+            value={filterAbteilung}
+            onChange={(e) => setFilterAbteilung(e.target.value)}
+            className="text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+          >
+            <option value="">Alle Abteilungen</option>
+            {uniqueAbteilungen.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        )}
+
         {[
-          { label: 'Abteilung', value: filterAbteilung, options: uniqueAbteilungen, set: setFilterAbteilung },
           { label: 'Rolle', value: filterRolle, options: uniqueRollen, set: setFilterRolle },
           { label: 'Zeitraum', value: filterZeitraum, options: uniqueZeitraeume, set: setFilterZeitraum },
         ].map(({ label, value, options, set }) => (
@@ -179,9 +209,18 @@ export const TeamOverview: React.FC<Props> = ({ teamProfiles, allAssessments }) 
             {options.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         ))}
-        {(filterAbteilung || filterRolle || filterZeitraum) && (
+
+        {!isTeamleiter && (filterAbteilung || filterRolle || filterZeitraum) && (
           <button
             onClick={() => { setFilterAbteilung(''); setFilterRolle(''); setFilterZeitraum(''); }}
+            className="text-xs px-3 py-2 rounded-lg text-red-500 hover:bg-red-50 transition"
+          >
+            Filter zurücksetzen
+          </button>
+        )}
+        {isTeamleiter && (filterRolle || filterZeitraum) && (
+          <button
+            onClick={() => { setFilterRolle(''); setFilterZeitraum(''); }}
             className="text-xs px-3 py-2 rounded-lg text-red-500 hover:bg-red-50 transition"
           >
             Filter zurücksetzen

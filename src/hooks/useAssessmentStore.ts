@@ -12,32 +12,36 @@ import type {
 
 const KEYS = {
   CURRENT_PROFILE: 'km_current_profile',
-  ASSESSMENTS: 'km_assessments',
-  TEAM_PROFILES: 'km_team_profiles',
-  SEEDED: 'km_seeded',
+  ASSESSMENTS:     'km_assessments',
+  TEAM_PROFILES:   'km_team_profiles',
+  SEEDED:          'km_seeded',
 };
 
-// -----------------------------------------------------------------------
-// Maturity badge lookup
-// -----------------------------------------------------------------------
+// Bump this when new seed profiles/assessments are added so existing
+// installations pick them up without a full wipe.
+const SEED_VERSION = 'v2';
+
+// ── Maturity badge ─────────────────────────────────────────────────────────
 export function getMaturityBadge(avg: number): MaturityBadge {
-  if (avg >= 4.0) return { label: 'Experte', emoji: '🏆', color: 'text-emerald-700', bgColor: 'bg-emerald-100', range: '4.0' };
-  if (avg >= 3.0) return { label: 'Kompetent', emoji: '🟢', color: 'text-green-700', bgColor: 'bg-green-100', range: '3.0–3.9' };
-  if (avg >= 2.0) return { label: 'Fortgeschritten', emoji: '🟡', color: 'text-yellow-700', bgColor: 'bg-yellow-100', range: '2.0–2.9' };
-  if (avg >= 1.0) return { label: 'Grundkenntnisse', emoji: '🟠', color: 'text-orange-700', bgColor: 'bg-orange-100', range: '1.0–1.9' };
-  return { label: 'Einsteiger', emoji: '🔴', color: 'text-red-700', bgColor: 'bg-red-100', range: '0.0–0.9' };
+  if (avg >= 4.0) return { label: 'Experte',       emoji: '🏆', color: 'text-emerald-700', bgColor: 'bg-emerald-100', range: '4.0' };
+  if (avg >= 3.0) return { label: 'Kompetent',     emoji: '🟢', color: 'text-green-700',   bgColor: 'bg-green-100',   range: '3.0–3.9' };
+  if (avg >= 2.0) return { label: 'Fortgeschritten',emoji: '🟡', color: 'text-yellow-700',  bgColor: 'bg-yellow-100',  range: '2.0–2.9' };
+  if (avg >= 1.0) return { label: 'Grundkenntnisse',emoji: '🟠', color: 'text-orange-700',  bgColor: 'bg-orange-100',  range: '1.0–1.9' };
+  return           { label: 'Einsteiger',          emoji: '🔴', color: 'text-red-700',     bgColor: 'bg-red-100',     range: '0.0–0.9' };
 }
 
-// -----------------------------------------------------------------------
-// Derived calculations
-// -----------------------------------------------------------------------
+// ── Derived calculations ──────────────────────────────────────────────────
 export function calcAreaScores(ratings: UseCaseRating[]): AreaScore[] {
   return COMPETENCY_AREAS.map((area) => {
     const ucIds = area.useCases.map((uc) => uc.id);
     const areaRatings = ratings.filter((r) => ucIds.includes(r.useCaseId));
     const levels = areaRatings.map((r) => r.level);
-    const average = levels.length > 0 ? levels.reduce((a: number, b: number) => a + b, 0) / levels.length : 0;
-    const pctLevel2Plus = levels.length > 0 ? (levels.filter((l) => l >= 2).length / levels.length) * 100 : 0;
+    const average =
+      levels.length > 0 ? levels.reduce((a: number, b: number) => a + b, 0) / levels.length : 0;
+    const pctLevel2Plus =
+      levels.length > 0
+        ? (levels.filter((l) => l >= 2).length / levels.length) * 100
+        : 0;
     return {
       areaId: area.id,
       areaTitle: area.title,
@@ -54,12 +58,9 @@ export function calcOverallAverage(ratings: UseCaseRating[]): number {
   return ratings.reduce((sum, r) => sum + r.level, 0) / ratings.length;
 }
 
-// -----------------------------------------------------------------------
-// Seed data initialiser
-// -----------------------------------------------------------------------
+// ── Seeding (versioned so new profiles always get added) ──────────────────
 function seedIfNeeded() {
-  const already = localStorage.getItem(KEYS.SEEDED);
-  if (already) return;
+  if (localStorage.getItem(KEYS.SEEDED) === SEED_VERSION) return;
 
   const existingAssessments: AssessmentData[] = JSON.parse(
     localStorage.getItem(KEYS.ASSESSMENTS) || '[]'
@@ -68,27 +69,23 @@ function seedIfNeeded() {
     localStorage.getItem(KEYS.TEAM_PROFILES) || '[]'
   );
 
+  const mergedProfiles = [
+    ...existingProfiles,
+    ...SEED_PROFILES.filter((sp) => !existingProfiles.find((ep) => ep.id === sp.id)),
+  ];
   const mergedAssessments = [
     ...existingAssessments,
     ...SEED_ASSESSMENTS.filter(
       (sa) => !existingAssessments.find((ea) => ea.employeeId === sa.employeeId)
     ),
   ];
-  const mergedProfiles = [
-    ...existingProfiles,
-    ...SEED_PROFILES.filter(
-      (sp) => !existingProfiles.find((ep) => ep.id === sp.id)
-    ),
-  ];
 
-  localStorage.setItem(KEYS.ASSESSMENTS, JSON.stringify(mergedAssessments));
   localStorage.setItem(KEYS.TEAM_PROFILES, JSON.stringify(mergedProfiles));
-  localStorage.setItem(KEYS.SEEDED, 'true');
+  localStorage.setItem(KEYS.ASSESSMENTS,   JSON.stringify(mergedAssessments));
+  localStorage.setItem(KEYS.SEEDED, SEED_VERSION);
 }
 
-// -----------------------------------------------------------------------
-// Main hook
-// -----------------------------------------------------------------------
+// ── Main hook ─────────────────────────────────────────────────────────────
 export function useAssessmentStore() {
   const [currentProfile, setCurrentProfile] = useState<EmployeeProfile | null>(() => {
     seedIfNeeded();
@@ -106,21 +103,44 @@ export function useAssessmentStore() {
     return raw ? JSON.parse(raw) : [];
   });
 
-  // Re-sync from localStorage on mount
+  // Re-sync on mount (picks up any changes made during seeding)
   useEffect(() => {
     seedIfNeeded();
     const raw = localStorage.getItem(KEYS.ASSESSMENTS);
     if (raw) setAllAssessments(JSON.parse(raw));
-    const rawProfiles = localStorage.getItem(KEYS.TEAM_PROFILES);
-    if (rawProfiles) setTeamProfiles(JSON.parse(rawProfiles));
+    const rawP = localStorage.getItem(KEYS.TEAM_PROFILES);
+    if (rawP) setTeamProfiles(JSON.parse(rawP));
   }, []);
 
-  // ---- Profile ----
+  // ── Set active employee (called after login) ───────────────────────────
+  const setActiveEmployee = useCallback((employeeId: string) => {
+    const rawProfiles = localStorage.getItem(KEYS.TEAM_PROFILES);
+    const profiles: EmployeeProfile[] = rawProfiles ? JSON.parse(rawProfiles) : [];
+    const profile = profiles.find((p) => p.id === employeeId) ?? null;
+
+    if (profile) {
+      localStorage.setItem(KEYS.CURRENT_PROFILE, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(KEYS.CURRENT_PROFILE);
+    }
+    setCurrentProfile(profile);
+
+    // Refresh all shared data in case seeding added new items
+    const rawA = localStorage.getItem(KEYS.ASSESSMENTS);
+    if (rawA) setAllAssessments(JSON.parse(rawA));
+    setTeamProfiles(profiles);
+  }, []);
+
+  const clearActiveEmployee = useCallback(() => {
+    localStorage.removeItem(KEYS.CURRENT_PROFILE);
+    setCurrentProfile(null);
+  }, []);
+
+  // ── Profile CRUD ───────────────────────────────────────────────────────
   const saveProfile = useCallback((profile: EmployeeProfile) => {
     localStorage.setItem(KEYS.CURRENT_PROFILE, JSON.stringify(profile));
     setCurrentProfile(profile);
 
-    // Also register in team profiles list
     const raw = localStorage.getItem(KEYS.TEAM_PROFILES);
     const profiles: EmployeeProfile[] = raw ? JSON.parse(raw) : [];
     const idx = profiles.findIndex((p) => p.id === profile.id);
@@ -130,7 +150,7 @@ export function useAssessmentStore() {
     setTeamProfiles(profiles);
   }, []);
 
-  // ---- Assessment for current user ----
+  // ── Assessment for current user ────────────────────────────────────────
   const currentAssessment = currentProfile
     ? allAssessments.find((a) => a.employeeId === currentProfile.id) ?? {
         employeeId: currentProfile.id,
@@ -178,33 +198,28 @@ export function useAssessmentStore() {
   );
 
   const getRating = useCallback(
-    (useCaseId: number): UseCaseRating | undefined => {
-      return currentAssessment?.ratings.find((r) => r.useCaseId === useCaseId);
-    },
+    (useCaseId: number): UseCaseRating | undefined =>
+      currentAssessment?.ratings.find((r) => r.useCaseId === useCaseId),
     [currentAssessment]
   );
 
-  // ---- Derived data ----
-  const areaScores = currentAssessment ? calcAreaScores(currentAssessment.ratings) : [];
+  // ── Derived data ───────────────────────────────────────────────────────
+  const areaScores    = currentAssessment ? calcAreaScores(currentAssessment.ratings) : [];
   const overallAverage = currentAssessment ? calcOverallAverage(currentAssessment.ratings) : 0;
-  const maturityBadge = getMaturityBadge(overallAverage);
+  const maturityBadge  = getMaturityBadge(overallAverage);
 
   const totalRated = currentAssessment?.ratings.length ?? 0;
   const pctLevel2Plus =
     totalRated > 0
-      ? Math.round(
-          (currentAssessment!.ratings.filter((r) => r.level >= 2).length / totalRated) * 100
-        )
+      ? Math.round((currentAssessment!.ratings.filter((r) => r.level >= 2).length / totalRated) * 100)
       : 0;
   const pctLevel3Plus =
     totalRated > 0
-      ? Math.round(
-          (currentAssessment!.ratings.filter((r) => r.level >= 3).length / totalRated) * 100
-        )
+      ? Math.round((currentAssessment!.ratings.filter((r) => r.level >= 3).length / totalRated) * 100)
       : 0;
 
   const strengths = [...areaScores].sort((a, b) => b.average - a.average).slice(0, 3);
-  const gaps = [...areaScores].sort((a, b) => a.average - b.average).slice(0, 3);
+  const gaps      = [...areaScores].sort((a, b) => a.average - b.average).slice(0, 3);
 
   const gapUseCases = currentAssessment
     ? COMPETENCY_AREAS.flatMap((area) =>
@@ -217,17 +232,17 @@ export function useAssessmentStore() {
       )
     : [];
 
-  // ---- Team data ----
   const getAssessmentForEmployee = useCallback(
-    (employeeId: string): AssessmentData | undefined => {
-      return allAssessments.find((a) => a.employeeId === employeeId);
-    },
+    (employeeId: string): AssessmentData | undefined =>
+      allAssessments.find((a) => a.employeeId === employeeId),
     [allAssessments]
   );
 
   return {
     currentProfile,
     saveProfile,
+    setActiveEmployee,
+    clearActiveEmployee,
     currentAssessment,
     saveRating,
     getRating,

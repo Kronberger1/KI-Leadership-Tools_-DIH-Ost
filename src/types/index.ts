@@ -1,5 +1,6 @@
 export type Level = 0 | 1 | 2 | 3 | 4;
 export type View = 'profile' | 'dashboard' | 'assessment' | 'gap' | 'team';
+export type UserRole = 'Mitarbeiter' | 'Teamleiter' | 'HR';
 
 export interface UseCaseRating {
   useCaseId: number;
@@ -43,4 +44,25 @@ export interface MaturityBadge {
   color: string;
   bgColor: string;
   range: string;
+}
+
+// ── Auth types ──────────────────────────────────────────────────────────────
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  passwordHash: string;
+  role: UserRole;
+  employeeId: string;
+  department?: string; // required for Teamleiter
+}
+
+export interface AuthSession {
+  userId: string;
+  employeeId: string;
+  role: UserRole;
+  username: string;
+  department?: string;
+  loggedInAt: number;
+  lastActivity: number;
 }
